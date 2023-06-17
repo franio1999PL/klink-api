@@ -50,7 +50,8 @@ API Endpoints
 - GET /: Fetches favorite items from GetPocket API, stores them in the MongoDB database, and returns the items as a JSON response.
 - GET /data: Retrieves the saved items from the MongoDB database and returns them as a JSON response, sorted by time_added in descending order
 
-Error Handling
+## Error Handling
+
 If there is an error during the authorization or fetching of items from GetPocket API, an email notification will be sent using SendGrid to the specified email address. The error details will be logged to the console as well.
 
 ## Contributing
