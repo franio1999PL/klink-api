@@ -5,6 +5,8 @@ const GetPocket = require('node-getpocket');
 const dotenv = require('dotenv');
 const sgMail = require('@sendgrid/mail');
 const { MongoClient } = require('mongodb');
+const NodeCache = require('node-cache');
+const cache = new NodeCache();
 
 dotenv.config();
 
@@ -148,43 +150,52 @@ app.get('/', async (req, res) => {
 
 app.get('/data', async (req, res) => {
     try {
-        const db = await connectToDatabase();
-        const kolekcjaWpisow = db.collection('wpisy');
-
         const page = parseInt(req.query.page) || 1;
-        const limit = 20;
-        const skip = (page - 1) * limit;
-
         const tag = req.query.tag;
-        console.log('Tag:', tag);
 
-        let query = {};
+        const cacheKey = `data:${page}:${tag}`;
 
-        if (tag) {
-            query['tags.' + tag] = { $exists: true }; // Sprawdzenie istnienia pola tags.tag
+        // Sprawdzenie, czy dane są dostępne w cache
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            // Dane są dostępne w cache, zwróć je bez odwoływania się do bazy danych
+            res.send(cachedData);
+        } else {
+            // Dane nie są dostępne w cache, pobierz je z bazy danych
+            const db = await connectToDatabase();
+            const kolekcjaWpisow = db.collection('wpisy');
+            const limit = 20;
+            const skip = (page - 1) * limit;
+
+            let query = {};
+
+            if (tag) {
+                query['tags.' + tag] = { $exists: true };
+            }
+
+            const totalCount = await kolekcjaWpisow.countDocuments(query);
+            const totalPages = Math.ceil(totalCount / limit);
+
+            const sortOptions = { time_added: -1 };
+
+            const sortedData = await kolekcjaWpisow
+                .find(query)
+                .sort(sortOptions)
+                .skip(skip)
+                .limit(limit)
+                .toArray();
+
+            const data = {
+                data: sortedData,
+                totalPages: totalPages,
+                currentPage: page
+            };
+
+            // Zapisz dane do cache
+            cache.set(cacheKey, data, 3600); // Dane będą ważne przez 1 godzinę (3600 sekund)
+
+            res.send(data);
         }
-
-        const totalCount = await kolekcjaWpisow.countDocuments(query);
-        const totalPages = Math.ceil(totalCount / limit);
-
-        const sortOptions = { time_added: -1 };
-
-        const sortedData = await kolekcjaWpisow
-            .find(query)
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(limit)
-            .toArray();
-
-        console.log("Tag:", tag);
-        console.log("Query:", query);
-        console.log("Sorted Data:", sortedData);
-
-        res.send({
-            data: sortedData,
-            totalPages: totalPages,
-            currentPage: page
-        });
     } catch (error) {
         console.error('Błąd podczas obsługi żądania:', error);
         res.status(500).send('Błąd serwera');
