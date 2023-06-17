@@ -163,3 +163,6 @@ app.get('/data', checkApiKey, async (req, res) => {
 // Pozostała część kodu
 
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+
+
+module.exports = app
