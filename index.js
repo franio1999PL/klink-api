@@ -40,15 +40,11 @@ const checkApiKey = (req, res, next) => {
         next(); // Kontynuuj do obsługi właściwej trasy
     } else {
         res.status(401).send({ code: 401, message: 'Unauthorized' }); // Nieprawidłowy klucz API, zwróć odpowiedź Unauthorized
-        return
+        return;
     }
 };
 
-
-
-app.post('/', async (req, res) => {
-
-
+app.get('/', async (req, res) => {
     try {
         const db = await connectToDatabase();
         const kolekcjaWpisow = db.collection('wpisy');
@@ -122,7 +118,7 @@ app.post('/', async (req, res) => {
                     time_added,
                     read_time,
                     word_count,
-                    tags
+                    tags: tags && Object.keys(tags).length > 0 ? tags : null
                 })
             );
 
@@ -130,10 +126,14 @@ app.post('/', async (req, res) => {
             const existingItems = await kolekcjaWpisow.find({ id: { $in: modifiedData.map(item => item.id) } }).toArray();
             const existingItemIds = existingItems.map(item => item.id);
 
-            // Filtrowanie wpisów, które jeszcze nie zostały dodane do bazy danych
-            const newItems = modifiedData.filter(item => !existingItemIds.includes(item.id));
-
             // Dodawanie nowych wpisów do bazy danych
+            const newItems = modifiedData.map(item => {
+                if (item.tags) {
+                    item.tags = Object.values(item.tags);
+                }
+                return item;
+            }).filter(item => !existingItemIds.includes(item.id));
+
             if (newItems.length > 0) {
                 await kolekcjaWpisow.insertMany(newItems);
             }
@@ -146,14 +146,79 @@ app.post('/', async (req, res) => {
     }
 });
 
-app.get('/data', checkApiKey, async (req, res) => {
+app.get('/data', async (req, res) => {
     try {
         const db = await connectToDatabase();
         const kolekcjaWpisow = db.collection('wpisy');
 
-        const sortedData = await kolekcjaWpisow.find().sort({ time_added: -1 }).toArray();
+        const page = parseInt(req.query.page) || 1;
+        const limit = 20;
+        const skip = (page - 1) * limit;
 
-        res.send(sortedData);
+        const tag = req.query.tag;
+        console.log('Tag:', tag);
+
+        let query = {};
+
+        if (tag) {
+            query['tags.' + tag] = { $exists: true }; // Sprawdzenie istnienia pola tags.tag
+        }
+
+        const totalCount = await kolekcjaWpisow.countDocuments(query);
+        const totalPages = Math.ceil(totalCount / limit);
+
+        const sortOptions = { time_added: -1 };
+
+        const sortedData = await kolekcjaWpisow
+            .find(query)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+            .toArray();
+
+        console.log("Tag:", tag);
+        console.log("Query:", query);
+        console.log("Sorted Data:", sortedData);
+
+        res.send({
+            data: sortedData,
+            totalPages: totalPages,
+            currentPage: page
+        });
+    } catch (error) {
+        console.error('Błąd podczas obsługi żądania:', error);
+        res.status(500).send('Błąd serwera');
+    }
+});
+
+
+
+
+
+
+app.get('/tags', async (req, res) => {
+    try {
+        const db = await connectToDatabase();
+        const kolekcjaWpisow = db.collection('wpisy');
+
+        const sortedData = await kolekcjaWpisow
+            .find()
+            .sort({ time_added: -1 })
+            .toArray();
+
+        const tagPool = new Set();
+        sortedData.forEach(wp => {
+            if (wp.tags) {
+                const tags = Array.isArray(wp.tags) ? wp.tags : Object.values(wp.tags);
+                tags.forEach(tag => {
+                    tagPool.add(tag.tag);
+                });
+            }
+        });
+
+        res.send({
+            tagPool: Array.from(tagPool)
+        });
     } catch (error) {
         console.error('Błąd podczas obsługi żądania:', error);
         res.status(500).send('Błąd serwera');
@@ -162,12 +227,11 @@ app.get('/data', checkApiKey, async (req, res) => {
 
 app.get('*', async (req, res) => {
     res.send({
-        code: 404, message: 'NOT FOUND'
-    })
-})
-// Pozostała część kodu
+        code: 404,
+        message: 'NOT FOUND'
+    });
+});
 
 app.listen(PORT, () => console.log(`Listening on ${PORT}`));
 
-
-module.exports = app
+module.exports = app;
