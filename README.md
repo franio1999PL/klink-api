@@ -25,10 +25,14 @@ Before running this application, make sure you have the following installed:
 
 2. Install the dependencies:
 
-cd express-pocket-api
-
-npm install or yarn
-
+```shell
+cd klink-api
+```
+```shell
+npm install
+or
+yarn
+```
 3. Create a .env file in the root directory of the project and provide the required environment variables. Here is an example:
 
 ```shell
