@@ -160,9 +160,13 @@ app.get('/data', checkApiKey, async (req, res) => {
     }
 });
 
-// Pozostała część kodu
+app.get('*', async (req, res) => {
+    res.send({
+        code: 404, message: 'NOT FOUND'
+    })
+    // Pozostała część kodu
 
-app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+    app.listen(PORT, () => console.log(`Listening on ${PORT}`));
 
 
-module.exports = app
+    module.exports = app
